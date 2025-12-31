@@ -56,6 +56,7 @@ class AgentProcessManager:
     def __init__(
         self,
         project_name: str,
+        project_dir: Path,
         root_dir: Path,
     ):
         """
@@ -63,9 +64,11 @@ class AgentProcessManager:
 
         Args:
             project_name: Name of the project
+            project_dir: Absolute path to the project directory
             root_dir: Root directory of the autonomous-coding-ui project
         """
         self.project_name = project_name
+        self.project_dir = project_dir
         self.root_dir = root_dir
         self.process: subprocess.Popen | None = None
         self._status: Literal["stopped", "running", "paused", "crashed"] = "stopped"
@@ -77,8 +80,8 @@ class AgentProcessManager:
         self._status_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
         self._callbacks_lock = threading.Lock()
 
-        # Lock file to prevent multiple instances
-        self.lock_file = self.root_dir / "generations" / project_name / ".agent.lock"
+        # Lock file to prevent multiple instances (stored in project directory)
+        self.lock_file = self.project_dir / ".agent.lock"
 
     @property
     def status(self) -> Literal["stopped", "running", "paused", "crashed"]:
@@ -224,21 +227,22 @@ class AgentProcessManager:
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
 
-        # Build command
+        # Build command - pass absolute path to project directory
         cmd = [
             sys.executable,
             str(self.root_dir / "autonomous_agent_demo.py"),
             "--project-dir",
-            self.project_name,
+            str(self.project_dir.resolve()),
         ]
 
         try:
             # Start subprocess with piped stdout/stderr
+            # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                cwd=str(self.root_dir),
+                cwd=str(self.project_dir),
             )
 
             self._create_lock()
@@ -379,11 +383,17 @@ _managers: dict[str, AgentProcessManager] = {}
 _managers_lock = threading.Lock()
 
 
-def get_manager(project_name: str, root_dir: Path) -> AgentProcessManager:
-    """Get or create a process manager for a project (thread-safe)."""
+def get_manager(project_name: str, project_dir: Path, root_dir: Path) -> AgentProcessManager:
+    """Get or create a process manager for a project (thread-safe).
+
+    Args:
+        project_name: Name of the project
+        project_dir: Absolute path to the project directory
+        root_dir: Root directory of the autonomous-coding-ui project
+    """
     with _managers_lock:
         if project_name not in _managers:
-            _managers[project_name] = AgentProcessManager(project_name, root_dir)
+            _managers[project_name] = AgentProcessManager(project_name, project_dir, root_dir)
         return _managers[project_name]
 
 

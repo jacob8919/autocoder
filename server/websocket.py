@@ -18,23 +18,20 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .services.process_manager import get_manager
 
 # Lazy imports
-_GENERATIONS_DIR = None
 _count_passing_tests = None
 
 logger = logging.getLogger(__name__)
 
 
-def _get_generations_dir():
-    """Lazy import of GENERATIONS_DIR."""
-    global _GENERATIONS_DIR
-    if _GENERATIONS_DIR is None:
-        import sys
-        root = Path(__file__).parent.parent
-        if str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from start import GENERATIONS_DIR
-        _GENERATIONS_DIR = GENERATIONS_DIR
-    return _GENERATIONS_DIR
+def _get_project_path(project_name: str) -> Path:
+    """Get project path from registry."""
+    import sys
+    root = Path(__file__).parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from registry import get_project_path
+    return get_project_path(project_name)
 
 
 def _get_count_passing_tests():
@@ -112,9 +109,8 @@ def validate_project_name(name: str) -> bool:
     return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
 
 
-async def poll_progress(websocket: WebSocket, project_name: str):
+async def poll_progress(websocket: WebSocket, project_name: str, project_dir: Path):
     """Poll database for progress changes and send updates."""
-    project_dir = _get_generations_dir() / project_name
     count_passing_tests = _get_count_passing_tests()
     last_passing = -1
     last_in_progress = -1
@@ -160,15 +156,19 @@ async def project_websocket(websocket: WebSocket, project_name: str):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+    if not project_dir:
+        await websocket.close(code=4004, reason="Project not found in registry")
+        return
+
     if not project_dir.exists():
-        await websocket.close(code=4004, reason="Project not found")
+        await websocket.close(code=4004, reason="Project directory not found")
         return
 
     await manager.connect(websocket, project_name)
 
     # Get agent manager and register callbacks
-    agent_manager = get_manager(project_name, ROOT_DIR)
+    agent_manager = get_manager(project_name, project_dir, ROOT_DIR)
 
     async def on_output(line: str):
         """Handle agent output - broadcast to this WebSocket."""
@@ -196,7 +196,7 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     agent_manager.add_status_callback(on_status_change)
 
     # Start progress polling task
-    poll_task = asyncio.create_task(poll_progress(websocket, project_name))
+    poll_task = asyncio.create_task(poll_progress(websocket, project_name, project_dir))
 
     try:
         # Send initial status

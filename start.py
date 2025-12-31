@@ -18,10 +18,11 @@ from prompts import (
     has_project_prompts,
     get_project_prompts_dir,
 )
-
-
-# Directory containing generated projects
-GENERATIONS_DIR = Path(__file__).parent / "generations"
+from registry import (
+    register_project,
+    get_project_path,
+    list_registered_projects,
+)
 
 
 def check_spec_exists(project_dir: Path) -> bool:
@@ -54,20 +55,24 @@ def check_spec_exists(project_dir: Path) -> bool:
     return False
 
 
-def get_existing_projects() -> list[str]:
-    """Get list of existing projects from generations folder."""
-    if not GENERATIONS_DIR.exists():
-        return []
+def get_existing_projects() -> list[tuple[str, Path]]:
+    """Get list of existing projects from registry.
 
+    Returns:
+        List of (name, path) tuples for registered projects that still exist.
+    """
+    registry = list_registered_projects()
     projects = []
-    for item in GENERATIONS_DIR.iterdir():
-        if item.is_dir() and not item.name.startswith('.'):
-            projects.append(item.name)
 
-    return sorted(projects)
+    for name, info in registry.items():
+        path = Path(info["path"])
+        if path.exists():
+            projects.append((name, path))
+
+    return sorted(projects, key=lambda x: x[0])
 
 
-def display_menu(projects: list[str]) -> None:
+def display_menu(projects: list[tuple[str, Path]]) -> None:
     """Display the main menu."""
     print("\n" + "=" * 50)
     print("  Autonomous Coding Agent Launcher")
@@ -81,21 +86,26 @@ def display_menu(projects: list[str]) -> None:
     print()
 
 
-def display_projects(projects: list[str]) -> None:
+def display_projects(projects: list[tuple[str, Path]]) -> None:
     """Display list of existing projects."""
     print("\n" + "-" * 40)
     print("  Existing Projects")
     print("-" * 40)
 
-    for i, project in enumerate(projects, 1):
-        print(f"  [{i}] {project}")
+    for i, (name, path) in enumerate(projects, 1):
+        print(f"  [{i}] {name}")
+        print(f"      {path}")
 
     print("\n  [b] Back to main menu")
     print()
 
 
-def get_project_choice(projects: list[str]) -> str | None:
-    """Get user's project selection."""
+def get_project_choice(projects: list[tuple[str, Path]]) -> tuple[str, Path] | None:
+    """Get user's project selection.
+
+    Returns:
+        Tuple of (name, path) for the selected project, or None if cancelled.
+    """
     while True:
         choice = input("Select project number: ").strip().lower()
 
@@ -111,8 +121,12 @@ def get_project_choice(projects: list[str]) -> str | None:
             print("Invalid input. Enter a number or 'b' to go back.")
 
 
-def get_new_project_name() -> str | None:
-    """Get name for new project."""
+def get_new_project_info() -> tuple[str, Path] | None:
+    """Get name and path for new project.
+
+    Returns:
+        Tuple of (name, path) for the new project, or None if cancelled.
+    """
     print("\n" + "-" * 40)
     print("  Create New Project")
     print("-" * 40)
@@ -137,26 +151,49 @@ def get_new_project_name() -> str | None:
             print(f"Invalid character '{char}' in project name")
             return None
 
-    return name
+    # Check if name already registered
+    existing = get_project_path(name)
+    if existing:
+        print(f"Project '{name}' already exists at {existing}")
+        return None
+
+    # Get project path
+    print("\nEnter the full path for the project directory")
+    print("(e.g., C:/Projects/my-app or /home/user/projects/my-app)")
+    print("Leave empty to cancel.\n")
+
+    path_str = input("Project path: ").strip()
+    if not path_str:
+        return None
+
+    project_path = Path(path_str).resolve()
+
+    return name, project_path
 
 
-def ensure_project_scaffolded(project_name: str) -> Path:
+def ensure_project_scaffolded(project_name: str, project_dir: Path) -> Path:
     """
-    Ensure project directory exists with prompt templates.
+    Ensure project directory exists with prompt templates and is registered.
 
-    Creates the project directory and copies template files if needed.
+    Creates the project directory, copies template files, and registers in registry.
+
+    Args:
+        project_name: Name of the project
+        project_dir: Absolute path to the project directory
 
     Returns:
         The project directory path
     """
-    project_dir = GENERATIONS_DIR / project_name
-
     # Create project directory if it doesn't exist
     project_dir.mkdir(parents=True, exist_ok=True)
 
     # Scaffold prompts (copies templates if they don't exist)
     print(f"\nSetting up project: {project_name}")
+    print(f"Location: {project_dir}")
     scaffold_project_prompts(project_dir)
+
+    # Register in registry
+    register_project(project_name, project_dir)
 
     return project_dir
 
@@ -266,23 +303,25 @@ def ask_spec_creation_choice() -> str | None:
         print("Invalid choice. Please enter 1, 2, or b.")
 
 
-def create_new_project_flow() -> str | None:
+def create_new_project_flow() -> tuple[str, Path] | None:
     """
     Complete flow for creating a new project.
 
-    1. Get project name
+    1. Get project name and path
     2. Create project directory and scaffold prompts
     3. Ask: Claude or Manual?
     4. If Claude: Run /create-spec with project path
     5. If Manual: Show paths, wait for Enter
-    6. Return project name if successful
+    6. Return (name, path) tuple if successful
     """
-    project_name = get_new_project_name()
-    if not project_name:
+    project_info = get_new_project_info()
+    if not project_info:
         return None
 
+    project_name, project_path = project_info
+
     # Create project directory and scaffold prompts FIRST
-    project_dir = ensure_project_scaffolded(project_name)
+    project_dir = ensure_project_scaffolded(project_name, project_path)
 
     # Ask user how they want to handle spec creation
     choice = ask_spec_creation_choice()
@@ -303,13 +342,16 @@ def create_new_project_flow() -> str | None:
         if not success:
             return None
 
-    return project_name
+    return project_name, project_dir
 
 
-def run_agent(project_name: str) -> None:
-    """Run the autonomous agent with the given project."""
-    project_dir = GENERATIONS_DIR / project_name
+def run_agent(project_name: str, project_dir: Path) -> None:
+    """Run the autonomous agent with the given project.
 
+    Args:
+        project_name: Name of the project
+        project_dir: Absolute path to the project directory
+    """
     # Final validation before running
     if not has_project_prompts(project_dir):
         print(f"\nWarning: No valid spec found for project '{project_name}'")
@@ -319,10 +361,11 @@ def run_agent(project_name: str) -> None:
             return
 
     print(f"\nStarting agent for project: {project_name}")
+    print(f"Location: {project_dir}")
     print("-" * 50)
 
-    # Build the command
-    cmd = [sys.executable, "autonomous_agent_demo.py", "--project-dir", project_name]
+    # Build the command - pass absolute path
+    cmd = [sys.executable, "autonomous_agent_demo.py", "--project-dir", str(project_dir.resolve())]
 
     # Run the agent
     try:
@@ -348,15 +391,17 @@ def main() -> None:
             break
 
         elif choice == '1':
-            project_name = create_new_project_flow()
-            if project_name:
-                run_agent(project_name)
+            result = create_new_project_flow()
+            if result:
+                project_name, project_dir = result
+                run_agent(project_name, project_dir)
 
         elif choice == '2' and projects:
             display_projects(projects)
             selected = get_project_choice(projects)
             if selected:
-                run_agent(selected)
+                project_name, project_dir = selected
+                run_agent(project_name, project_dir)
 
         else:
             print("Invalid option. Please try again.")

@@ -29,8 +29,8 @@ export function useCreateProject() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ name, specMethod }: { name: string; specMethod?: 'claude' | 'manual' }) =>
-      api.createProject(name, specMethod),
+    mutationFn: ({ name, path, specMethod }: { name: string; path: string; specMethod?: 'claude' | 'manual' }) =>
+      api.createProject(name, path, specMethod),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
@@ -168,5 +168,35 @@ export function useHealthCheck() {
     queryKey: ['health'],
     queryFn: api.healthCheck,
     retry: false,
+  })
+}
+
+// ============================================================================
+// Filesystem
+// ============================================================================
+
+export function useListDirectory(path?: string) {
+  return useQuery({
+    queryKey: ['filesystem', 'list', path],
+    queryFn: () => api.listDirectory(path),
+  })
+}
+
+export function useCreateDirectory() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (path: string) => api.createDirectory(path),
+    onSuccess: (_, path) => {
+      // Invalidate parent directory listing
+      const parentPath = path.split('/').slice(0, -1).join('/') || undefined
+      queryClient.invalidateQueries({ queryKey: ['filesystem', 'list', parentPath] })
+    },
+  })
+}
+
+export function useValidatePath() {
+  return useMutation({
+    mutationFn: (path: string) => api.validatePath(path),
   })
 }

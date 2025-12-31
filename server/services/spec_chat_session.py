@@ -35,15 +35,16 @@ class SpecChatSession:
     - Phase 6-7: Success Criteria & Approval
     """
 
-    def __init__(self, project_name: str):
+    def __init__(self, project_name: str, project_dir: Path):
         """
         Initialize the session.
 
         Args:
             project_name: Name of the project being created
+            project_dir: Absolute path to the project directory
         """
         self.project_name = project_name
-        self.project_dir = ROOT_DIR / "generations" / project_name
+        self.project_dir = project_dir
         self.client: Optional[ClaudeSDKClient] = None
         self.messages: list[dict] = []
         self.complete: bool = False
@@ -342,14 +343,19 @@ def get_session(project_name: str) -> Optional[SpecChatSession]:
         return _sessions.get(project_name)
 
 
-async def create_session(project_name: str) -> SpecChatSession:
-    """Create a new session for a project, closing any existing one."""
+async def create_session(project_name: str, project_dir: Path) -> SpecChatSession:
+    """Create a new session for a project, closing any existing one.
+
+    Args:
+        project_name: Name of the project
+        project_dir: Absolute path to the project directory
+    """
     old_session: Optional[SpecChatSession] = None
 
     with _sessions_lock:
         # Get existing session to close later (outside the lock)
         old_session = _sessions.pop(project_name, None)
-        session = SpecChatSession(project_name)
+        session = SpecChatSession(project_name, project_dir)
         _sessions[project_name] = session
 
     # Close old session outside the lock to avoid blocking

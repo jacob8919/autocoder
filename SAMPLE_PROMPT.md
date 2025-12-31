@@ -18,3 +18,5 @@ to-dos, we should store:
 - Optionally, we can also set tags, due dates, and priorities which should be represented as beautiful little badges
   on the to-do card Users should have the ability to easily clear out all the completed To-Dos. They should also be
   able to filter and search for To-Dos as well.
+
+You choose the rest. Keep it simple. Should be 25 features.

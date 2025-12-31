@@ -8,8 +8,14 @@ This script implements the two-agent pattern (initializer + coding agent) and
 incorporates all the strategies from the long-running agents guide.
 
 Example Usage:
-    python autonomous_agent_demo.py --project-dir ./claude_clone_demo
-    python autonomous_agent_demo.py --project-dir ./claude_clone_demo --max-iterations 5
+    # Using absolute path directly
+    python autonomous_agent_demo.py --project-dir C:/Projects/my-app
+
+    # Using registered project name (looked up from registry)
+    python autonomous_agent_demo.py --project-dir my-app
+
+    # Limit iterations for testing
+    python autonomous_agent_demo.py --project-dir my-app --max-iterations 5
 """
 
 import argparse
@@ -24,6 +30,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent import run_autonomous_agent
+from registry import get_project_path
 
 
 # Configuration
@@ -38,17 +45,17 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Start fresh project
-  python autonomous_agent_demo.py --project-dir ./claude_clone
+  # Use absolute path directly
+  python autonomous_agent_demo.py --project-dir C:/Projects/my-app
+
+  # Use registered project name (looked up from registry)
+  python autonomous_agent_demo.py --project-dir my-app
 
   # Use a specific model
-  python autonomous_agent_demo.py --project-dir ./claude_clone --model claude-sonnet-4-5-20250929
+  python autonomous_agent_demo.py --project-dir my-app --model claude-sonnet-4-5-20250929
 
   # Limit iterations for testing
-  python autonomous_agent_demo.py --project-dir ./claude_clone --max-iterations 5
-
-  # Continue existing project
-  python autonomous_agent_demo.py --project-dir ./claude_clone
+  python autonomous_agent_demo.py --project-dir my-app --max-iterations 5
 
 Authentication:
   Uses Claude CLI credentials from ~/.claude/.credentials.json
@@ -58,9 +65,9 @@ Authentication:
 
     parser.add_argument(
         "--project-dir",
-        type=Path,
-        default=Path("./autonomous_demo_project"),
-        help="Directory for the project (default: generations/autonomous_demo_project). Relative paths automatically placed in generations/ directory.",
+        type=str,
+        required=True,
+        help="Project directory path (absolute) or registered project name",
     )
 
     parser.add_argument(
@@ -87,16 +94,26 @@ def main() -> None:
     # Note: Authentication is handled by start.bat/start.sh before this script runs.
     # The Claude SDK auto-detects credentials from ~/.claude/.credentials.json
 
-    # Automatically place projects in generations/ directory unless already specified
-    project_dir = args.project_dir
-    if not str(project_dir).startswith("generations/"):
-        # Convert relative paths to be under generations/
-        if project_dir.is_absolute():
-            # If absolute path, use as-is
-            pass
+    # Resolve project directory:
+    # 1. If absolute path, use as-is
+    # 2. Otherwise, look up from registry by name
+    project_dir_input = args.project_dir
+    project_dir = Path(project_dir_input)
+
+    if project_dir.is_absolute():
+        # Absolute path provided - use directly
+        if not project_dir.exists():
+            print(f"Error: Project directory does not exist: {project_dir}")
+            return
+    else:
+        # Treat as a project name - look up from registry
+        registered_path = get_project_path(project_dir_input)
+        if registered_path:
+            project_dir = registered_path
         else:
-            # Prepend generations/ to relative paths
-            project_dir = Path("generations") / project_dir
+            print(f"Error: Project '{project_dir_input}' not found in registry")
+            print("Use an absolute path or register the project first.")
+            return
 
     try:
         # Run the agent (MCP server handles feature database)

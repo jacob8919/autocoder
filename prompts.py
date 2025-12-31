@@ -5,7 +5,7 @@ Prompt Loading Utilities
 Functions for loading prompt templates with project-specific support.
 
 Fallback chain:
-1. Project-specific: generations/{project}/prompts/{name}.md
+1. Project-specific: {project_dir}/prompts/{name}.md
 2. Base template: .claude/templates/{name}.template.md
 """
 
@@ -119,7 +119,7 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
     This sets up a new project with template files that can be customized.
 
     Args:
-        project_dir: The project directory (e.g., generations/my-app)
+        project_dir: The absolute path to the project directory
 
     Returns:
         The path to the project prompts directory

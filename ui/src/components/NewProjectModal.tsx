@@ -3,20 +3,22 @@
  *
  * Multi-step modal for creating new projects:
  * 1. Enter project name
- * 2. Choose spec method (Claude or manual)
- * 3a. If Claude: Show SpecCreationChat
- * 3b. If manual: Create project and close
+ * 2. Select project folder
+ * 3. Choose spec method (Claude or manual)
+ * 4a. If Claude: Show SpecCreationChat
+ * 4b. If manual: Create project and close
  */
 
 import { useState } from 'react'
-import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } from 'lucide-react'
 import { useCreateProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
+import { FolderBrowser } from './FolderBrowser'
 import { startAgent } from '../lib/api'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'method' | 'chat' | 'complete'
+type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
 type SpecMethod = 'claude' | 'manual'
 
 interface NewProjectModalProps {
@@ -32,6 +34,7 @@ export function NewProjectModal({
 }: NewProjectModalProps) {
   const [step, setStep] = useState<Step>('name')
   const [projectName, setProjectName] = useState('')
+  const [projectPath, setProjectPath] = useState<string | null>(null)
   const [_specMethod, setSpecMethod] = useState<SpecMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
@@ -59,17 +62,35 @@ export function NewProjectModal({
     }
 
     setError(null)
+    setStep('folder')
+  }
+
+  const handleFolderSelect = (path: string) => {
+    // Append project name to the selected path
+    const fullPath = path.endsWith('/') ? `${path}${projectName.trim()}` : `${path}/${projectName.trim()}`
+    setProjectPath(fullPath)
     setStep('method')
+  }
+
+  const handleFolderCancel = () => {
+    setStep('name')
   }
 
   const handleMethodSelect = async (method: SpecMethod) => {
     setSpecMethod(method)
+
+    if (!projectPath) {
+      setError('Please select a project folder first')
+      setStep('folder')
+      return
+    }
 
     if (method === 'manual') {
       // Create project immediately with manual method
       try {
         const project = await createProject.mutateAsync({
           name: projectName.trim(),
+          path: projectPath,
           specMethod: 'manual',
         })
         setStep('complete')
@@ -85,6 +106,7 @@ export function NewProjectModal({
       try {
         await createProject.mutateAsync({
           name: projectName.trim(),
+          path: projectPath,
           specMethod: 'claude',
         })
         setStep('chat')
@@ -126,6 +148,7 @@ export function NewProjectModal({
   const handleClose = () => {
     setStep('name')
     setProjectName('')
+    setProjectPath(null)
     setSpecMethod(null)
     setError(null)
     setInitializerStatus('idle')
@@ -135,8 +158,11 @@ export function NewProjectModal({
 
   const handleBack = () => {
     if (step === 'method') {
-      setStep('name')
+      setStep('folder')
       setSpecMethod(null)
+    } else if (step === 'folder') {
+      setStep('name')
+      setProjectPath(null)
     }
   }
 
@@ -152,6 +178,47 @@ export function NewProjectModal({
           initializerError={initializerError}
           onRetryInitializer={handleRetryInitializer}
         />
+      </div>
+    )
+  }
+
+  // Folder step uses larger modal
+  if (step === 'folder') {
+    return (
+      <div className="neo-modal-backdrop" onClick={handleClose}>
+        <div
+          className="neo-modal w-full max-w-3xl max-h-[85vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
+            <div className="flex items-center gap-3">
+              <Folder size={24} className="text-[var(--color-neo-progress)]" />
+              <div>
+                <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+                  Select Project Location
+                </h2>
+                <p className="text-sm text-[#4a4a4a]">
+                  A folder named <span className="font-bold font-mono">{projectName}</span> will be created inside the selected directory
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClose}
+              className="neo-btn neo-btn-ghost p-2"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Folder Browser */}
+          <div className="flex-1 overflow-hidden">
+            <FolderBrowser
+              onSelect={handleFolderSelect}
+              onCancel={handleFolderCancel}
+            />
+          </div>
+        </div>
       </div>
     )
   }

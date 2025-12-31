@@ -158,6 +158,9 @@ def create_client(project_dir: Path, model: str):
                     "command": sys.executable,  # Use the same Python that's running this script
                     "args": ["-m", "mcp_server.feature_mcp"],
                     "env": {
+                        # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
+                        **os.environ,
+                        # Add custom variables
                         "PROJECT_DIR": str(project_dir.resolve()),
                         "PYTHONPATH": str(Path(__file__).parent.resolve()),
                     },

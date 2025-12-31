@@ -39,8 +39,9 @@ pip install -r requirements.txt
 # Run the main CLI launcher
 python start.py
 
-# Run agent directly for a specific project
-python autonomous_agent_demo.py --project-dir PROJECT_NAME
+# Run agent directly for a project (use absolute path or registered name)
+python autonomous_agent_demo.py --project-dir C:/Projects/my-app
+python autonomous_agent_demo.py --project-dir my-app  # if registered
 ```
 
 ### React UI (in ui/ directory)
@@ -66,6 +67,29 @@ npm run lint     # Run ESLint
 - `security.py` - Bash command allowlist validation (ALLOWED_COMMANDS whitelist)
 - `prompts.py` - Prompt template loading with project-specific fallback
 - `progress.py` - Progress tracking, database queries, webhook notifications
+- `registry.py` - Project registry for mapping names to paths (cross-platform)
+
+### Project Registry
+
+Projects can be stored in any directory. The registry (`projects.json`) maps project names to paths:
+- **Windows**: `%APPDATA%\autonomous-coder\projects.json`
+- **macOS**: `~/Library/Application Support/autonomous-coder/projects.json`
+- **Linux**: `~/.config/autonomous-coder/projects.json`
+
+The registry uses:
+- POSIX path format (forward slashes) for cross-platform compatibility
+- File locking for concurrent access safety
+- Atomic writes (temp file + rename) to prevent corruption
+
+### Server API (server/)
+
+The FastAPI server provides REST endpoints for the UI:
+
+- `server/routers/projects.py` - Project CRUD with registry integration
+- `server/routers/features.py` - Feature management
+- `server/routers/agent.py` - Agent control (start/stop/pause/resume)
+- `server/routers/filesystem.py` - Filesystem browser API with security controls
+- `server/routers/spec_creation.py` - WebSocket for interactive spec creation
 
 ### Feature Management
 
@@ -90,14 +114,17 @@ MCP tools available to the agent:
 - `src/hooks/useProjects.ts` - React Query hooks for API calls
 - `src/lib/api.ts` - REST API client
 - `src/lib/types.ts` - TypeScript type definitions
+- `src/components/FolderBrowser.tsx` - Server-side filesystem browser for project folder selection
+- `src/components/NewProjectModal.tsx` - Multi-step project creation wizard
 
 ### Project Structure for Generated Apps
 
-Generated projects are stored in `generations/PROJECT_NAME/` with:
+Projects can be stored in any directory (registered in `projects.json`). Each project contains:
 - `prompts/app_spec.txt` - Application specification (XML format)
 - `prompts/initializer_prompt.md` - First session prompt
 - `prompts/coding_prompt.md` - Continuation session prompt
 - `features.db` - SQLite database with feature test cases
+- `.agent.lock` - Lock file to prevent multiple agent instances
 
 ### Security Model
 
@@ -116,7 +143,7 @@ Defense-in-depth approach configured in `client.py`:
 
 ### Prompt Loading Fallback Chain
 
-1. Project-specific: `generations/{project}/prompts/{name}.md`
+1. Project-specific: `{project_dir}/prompts/{name}.md`
 2. Base template: `.claude/templates/{name}.template.md`
 
 ### Agent Session Flow

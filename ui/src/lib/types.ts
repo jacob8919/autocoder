@@ -12,12 +12,42 @@ export interface ProjectStats {
 
 export interface ProjectSummary {
   name: string
+  path: string
   has_spec: boolean
   stats: ProjectStats
 }
 
 export interface ProjectDetail extends ProjectSummary {
   prompts_dir: string
+}
+
+// Filesystem types
+export interface DriveInfo {
+  letter: string
+  label: string
+  available?: boolean
+}
+
+export interface DirectoryEntry {
+  name: string
+  path: string
+  is_directory: boolean
+  has_children: boolean
+}
+
+export interface DirectoryListResponse {
+  current_path: string
+  parent_path: string | null
+  entries: DirectoryEntry[]
+  drives: DriveInfo[] | null
+}
+
+export interface PathValidationResponse {
+  valid: boolean
+  exists: boolean
+  is_directory: boolean
+  can_write: boolean
+  message: string
 }
 
 export interface ProjectPrompts {

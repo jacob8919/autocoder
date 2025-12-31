@@ -12,6 +12,8 @@ import type {
   AgentStatusResponse,
   AgentActionResponse,
   SetupStatus,
+  DirectoryListResponse,
+  PathValidationResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -41,10 +43,14 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return fetchJSON('/projects')
 }
 
-export async function createProject(name: string, specMethod: 'claude' | 'manual' = 'manual'): Promise<ProjectSummary> {
+export async function createProject(
+  name: string,
+  path: string,
+  specMethod: 'claude' | 'manual' = 'manual'
+): Promise<ProjectSummary> {
   return fetchJSON('/projects', {
     method: 'POST',
-    body: JSON.stringify({ name, spec_method: specMethod }),
+    body: JSON.stringify({ name, path, spec_method: specMethod }),
   })
 }
 
@@ -145,4 +151,60 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 export async function healthCheck(): Promise<{ status: string }> {
   return fetchJSON('/health')
+}
+
+// ============================================================================
+// Filesystem API
+// ============================================================================
+
+export async function listDirectory(path?: string): Promise<DirectoryListResponse> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : ''
+  return fetchJSON(`/filesystem/list${params}`)
+}
+
+export async function createDirectory(fullPath: string): Promise<{ success: boolean; path: string }> {
+  // Backend expects { parent_path, name }, not { path }
+  // Split the full path into parent directory and folder name
+
+  // Remove trailing slash if present
+  const normalizedPath = fullPath.endsWith('/') ? fullPath.slice(0, -1) : fullPath
+
+  // Find the last path separator
+  const lastSlash = normalizedPath.lastIndexOf('/')
+
+  let parentPath: string
+  let name: string
+
+  // Handle Windows drive root (e.g., "C:/newfolder")
+  if (lastSlash === 2 && /^[A-Za-z]:/.test(normalizedPath)) {
+    // Path like "C:/newfolder" - parent is "C:/"
+    parentPath = normalizedPath.substring(0, 3) // "C:/"
+    name = normalizedPath.substring(3)
+  } else if (lastSlash > 0) {
+    parentPath = normalizedPath.substring(0, lastSlash)
+    name = normalizedPath.substring(lastSlash + 1)
+  } else if (lastSlash === 0) {
+    // Unix root path like "/newfolder"
+    parentPath = '/'
+    name = normalizedPath.substring(1)
+  } else {
+    // No slash - invalid path
+    throw new Error('Invalid path: must be an absolute path')
+  }
+
+  if (!name) {
+    throw new Error('Invalid path: directory name is empty')
+  }
+
+  return fetchJSON('/filesystem/create-directory', {
+    method: 'POST',
+    body: JSON.stringify({ parent_path: parentPath, name }),
+  })
+}
+
+export async function validatePath(path: string): Promise<PathValidationResponse> {
+  return fetchJSON('/filesystem/validate', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
 }

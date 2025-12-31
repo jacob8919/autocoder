@@ -19,25 +19,21 @@ from ..schemas import (
 )
 
 # Lazy imports to avoid circular dependencies
-_GENERATIONS_DIR = None
 _create_database = None
 _Feature = None
 
 logger = logging.getLogger(__name__)
 
 
-def _get_generations_dir():
-    """Lazy import of GENERATIONS_DIR."""
-    global _GENERATIONS_DIR
-    if _GENERATIONS_DIR is None:
-        import sys
-        from pathlib import Path
-        root = Path(__file__).parent.parent.parent
-        if str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from start import GENERATIONS_DIR
-        _GENERATIONS_DIR = GENERATIONS_DIR
-    return _GENERATIONS_DIR
+def _get_project_path(project_name: str) -> Path:
+    """Get project path from registry."""
+    import sys
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from registry import get_project_path
+    return get_project_path(project_name)
 
 
 def _get_db_classes():
@@ -108,10 +104,13 @@ async def list_features(project_name: str):
     - done: passes=True
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
 
     db_file = project_dir / "features.db"
     if not db_file.exists():
@@ -152,10 +151,13 @@ async def list_features(project_name: str):
 async def create_feature(project_name: str, feature: FeatureCreate):
     """Create a new feature/test case manually."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
 
     _, Feature = _get_db_classes()
 
@@ -194,10 +196,13 @@ async def create_feature(project_name: str, feature: FeatureCreate):
 async def get_feature(project_name: str, feature_id: int):
     """Get details of a specific feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
 
     db_file = project_dir / "features.db"
     if not db_file.exists():
@@ -224,10 +229,13 @@ async def get_feature(project_name: str, feature_id: int):
 async def delete_feature(project_name: str, feature_id: int):
     """Delete a feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
 
     _, Feature = _get_db_classes()
 
@@ -258,10 +266,13 @@ async def skip_feature(project_name: str, feature_id: int):
     so it will be processed last.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_generations_dir() / project_name
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
 
     _, Feature = _get_db_classes()
 

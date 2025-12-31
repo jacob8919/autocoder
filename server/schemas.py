@@ -17,12 +17,14 @@ from pydantic import BaseModel, Field
 class ProjectCreate(BaseModel):
     """Request schema for creating a new project."""
     name: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
+    path: str = Field(..., min_length=1, description="Absolute path to project directory")
     spec_method: Literal["claude", "manual"] = "claude"
 
 
 class ProjectStats(BaseModel):
     """Project statistics."""
     passing: int = 0
+    in_progress: int = 0
     total: int = 0
     percentage: float = 0.0
 
@@ -30,6 +32,7 @@ class ProjectStats(BaseModel):
 class ProjectSummary(BaseModel):
     """Summary of a project for list view."""
     name: str
+    path: str
     has_spec: bool
     stats: ProjectStats
 
@@ -37,6 +40,7 @@ class ProjectSummary(BaseModel):
 class ProjectDetail(BaseModel):
     """Detailed project information."""
     name: str
+    path: str
     has_spec: bool
     stats: ProjectStats
     prompts_dir: str
@@ -151,3 +155,48 @@ class WSAgentStatusMessage(BaseModel):
     """WebSocket message for agent status changes."""
     type: Literal["agent_status"] = "agent_status"
     status: str
+
+
+# ============================================================================
+# Filesystem Schemas
+# ============================================================================
+
+class DriveInfo(BaseModel):
+    """Information about a drive (Windows only)."""
+    letter: str
+    label: str
+    available: bool = True
+
+
+class DirectoryEntry(BaseModel):
+    """An entry in a directory listing."""
+    name: str
+    path: str  # POSIX format
+    is_directory: bool
+    is_hidden: bool = False
+    size: int | None = None  # Bytes, for files
+    has_children: bool = False  # True if directory has subdirectories
+
+
+class DirectoryListResponse(BaseModel):
+    """Response for directory listing."""
+    current_path: str  # POSIX format
+    parent_path: str | None
+    entries: list[DirectoryEntry]
+    drives: list[DriveInfo] | None = None  # Windows only
+
+
+class PathValidationResponse(BaseModel):
+    """Response for path validation."""
+    valid: bool
+    exists: bool
+    is_directory: bool
+    can_read: bool
+    can_write: bool
+    message: str = ""
+
+
+class CreateDirectoryRequest(BaseModel):
+    """Request to create a new directory."""
+    parent_path: str
+    name: str = Field(..., min_length=1, max_length=255)

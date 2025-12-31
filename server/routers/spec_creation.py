@@ -31,6 +31,17 @@ router = APIRouter(prefix="/api/spec", tags=["spec-creation"])
 ROOT_DIR = Path(__file__).parent.parent.parent
 
 
+def _get_project_path(project_name: str) -> Path:
+    """Get project path from registry."""
+    import sys
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from registry import get_project_path
+    return get_project_path(project_name)
+
+
 def validate_project_name(name: str) -> bool:
     """Validate project name to prevent path traversal."""
     return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
@@ -116,6 +127,16 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
+    # Look up project directory from registry
+    project_dir = _get_project_path(project_name)
+    if not project_dir:
+        await websocket.close(code=4004, reason="Project not found in registry")
+        return
+
+    if not project_dir.exists():
+        await websocket.close(code=4004, reason="Project directory not found")
+        return
+
     await websocket.accept()
 
     session: Optional[SpecChatSession] = None
@@ -134,7 +155,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
 
                 elif msg_type == "start":
                     # Create and start a new session
-                    session = await create_session(project_name)
+                    session = await create_session(project_name, project_dir)
 
                     # Track spec completion state
                     spec_complete_received = False
