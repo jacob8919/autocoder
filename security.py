@@ -45,6 +45,7 @@ ALLOWED_COMMANDS = {
     "docker",
     # Process management
     "ps",
+    "pgrep",  # Find processes by name (read-only)
     "lsof",
     "sleep",
     "kill",  # Kill by PID
